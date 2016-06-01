@@ -1,15 +1,11 @@
 package module
 
-//#cgo LDFLAGS: -ldl
-//#include <dlfcn.h>
-//#include <stdlib.h>
-import "C"
 import (
 	"fmt"
-	"unsafe"
+
+	"github.com/rainycape/dl"
 )
 
-//export Module
 type Module interface {
 	Start() error
 	Stop() error
@@ -21,36 +17,32 @@ const defaultSymbol = "NewModule"
 
 func Plug(name, path string) error {
 
-	cstringPath := C.CString(path)
-	defer C.free(unsafe.Pointer(cstringPath))
-	cstringSymbol := C.CString(defaultSymbol)
-	defer C.free(unsafe.Pointer(cstringSymbol))
-
-	handler := C.dlopen(cstringPath, C.RTLD_LAZY|C.RTLD_LOCAL)
-	if handler == nil {
-		return fmt.Errorf("load %s ocurr %s", path, C.GoString(C.dlerror()))
+	dlHandler, err := dl.Open(path, dl.RTLD_LAZY|dl.RTLD_LOCAL)
+	if err != nil {
+		return err
 	}
 
-	symbol := C.dlsym(handler, cstringSymbol)
-	if symbol == nil {
-		C.dlclose(handler)
-		return fmt.Errorf("load %s not found %", path, defaultSymbol)
+	var handlerFunc NewModule
+	err = dlHandler.Sym(defaultSymbol, &handlerFunc)
+	if err != nil {
+		dlHandler.Close()
+		return err
 	}
 
-	interf := (*(*NewModule)(symbol))()
-	if interf == nil {
-		C.dlclose(handler)
-		return fmt.Errorf("load %s get nil module", path)
+	moduleInterface := handlerFunc()
+	if moduleInterface == nil {
+		dlHandler.Close()
+		return fmt.Errorf("nil interface")
 	}
 
-	module, ok := interf.(Module)
+	module, ok := moduleInterface.(Module)
 	if !ok {
-		C.dlclose(handler)
+		dlHandler.Close()
 		return fmt.Errorf("load %s get nil module", path)
 	}
 
 	if err := Register(name, module); err != nil {
-		C.dlclose(handler)
+		dlHandler.Close()
 		return fmt.Errorf("load %s register module : %v", path, err)
 	}
 
@@ -58,6 +50,6 @@ func Plug(name, path string) error {
 }
 
 func UnPlug(name string) error {
-	// TODO C.dlclose(handler)
+	// TODO close
 	return nil
 }
