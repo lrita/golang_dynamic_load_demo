@@ -5,23 +5,17 @@ import (
 	"fmt"
 	"math/rand"
 	"time"
+
+	"github.com/lrita/golang_dynamic_load_demo/module"
 )
 
 // "package main" and "func main() {}" must be defined in per module package
 func main() {}
 
-//export NewModule
-func NewModule() interface{} {
-	//This function must be defined in your module's package
-	//It return your module which will be loads by golang_dynamic_load_demo
-	return &exampleModule{
-		id: rand.Int31(),
-	}
-}
-
 func init() {
 	fmt.Printf("run init() function...\n")
 	rand.Seed(time.Now().Unix())
+	module.Register("example", &exampleModule{id: rand.Int31()})
 }
 
 type exampleModule struct {

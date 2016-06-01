@@ -1,9 +1,12 @@
 package module
 
+//#cgo LDFLAGS: -ldl -fPIC
+//#include <dlfcn.h>
+//#include <stdlib.h>
+import "C"
 import (
 	"fmt"
-
-	"github.com/rainycape/dl"
+	"unsafe"
 )
 
 type Module interface {
@@ -11,39 +14,14 @@ type Module interface {
 	Stop() error
 }
 
-type NewModule func() interface{}
-
-const defaultSymbol = "NewModule"
-
 func Plug(name, path string) error {
 
-	dlHandler, err := dl.Open(path, dl.RTLD_LAZY|dl.RTLD_LOCAL)
-	if err != nil {
-		return err
-	}
+	cstring := C.CString(path)
+	defer C.free(unsafe.Pointer(cstring))
 
-	var handlerFunc NewModule
-	err = dlHandler.Sym(defaultSymbol, &handlerFunc)
-	if err != nil {
-		dlHandler.Close()
-		return err
-	}
-
-	moduleInterface := handlerFunc()
-	if moduleInterface == nil {
-		dlHandler.Close()
-		return fmt.Errorf("nil interface")
-	}
-
-	module, ok := moduleInterface.(Module)
-	if !ok {
-		dlHandler.Close()
-		return fmt.Errorf("load %s get nil module", path)
-	}
-
-	if err := Register(name, module); err != nil {
-		dlHandler.Close()
-		return fmt.Errorf("load %s register module : %v", path, err)
+	handler := C.dlopen(cstring, C.RTLD_LAZY|C.RTLD_LOCAL)
+	if handler == nil {
+		return fmt.Errorf("load %s ocurr %s", path, C.GoString(C.dlerror()))
 	}
 
 	return nil
